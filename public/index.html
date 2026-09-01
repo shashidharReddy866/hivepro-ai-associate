@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TawasolPay Cyber Risk Assistant</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">HivePro AI Associate Assignment</p>
+        <h1>TawasolPay Cyber Risk Assistant</h1>
+      </div>
+      <button id="refreshButton" type="button">Refresh References</button>
+    </header>
+
+    <main>
+      <section class="summary" id="summary">
+        <div class="metric"><span>Assets</span><strong>--</strong></div>
+        <div class="metric"><span>Vulnerabilities</span><strong>--</strong></div>
+        <div class="metric"><span>Threat Intel</span><strong>--</strong></div>
+        <div class="metric"><span>Services</span><strong>--</strong></div>
+      </section>
+
+      <section class="controls">
+        <label>
+          Search
+          <input id="searchInput" type="search" placeholder="Filter by asset, CVE, campaign, service..." />
+        </label>
+        <label>
+          Minimum Score
+          <input id="scoreInput" type="range" min="0" max="160" value="0" />
+        </label>
+        <span id="scoreValue">0</span>
+      </section>
+
+      <section id="riskList" class="risk-list" aria-live="polite">
+        <p class="loading">Loading risk analysis...</p>
+      </section>
+
+      <section class="provenance" id="provenance"></section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

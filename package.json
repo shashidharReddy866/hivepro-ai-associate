@@ -1,0 +1,16 @@
+{
+  "name": "hivepro-ai-associate-risk-assistant",
+  "version": "1.0.0",
+  "description": "AI-powered cyber risk assistant for the HivePro associate assignment.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "analyze": "node src/cli.js",
+    "test": "node tests/riskEngine.test.js",
+    "refresh:references": "node scripts/download-references.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
