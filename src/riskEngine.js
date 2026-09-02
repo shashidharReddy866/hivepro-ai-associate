@@ -12,46 +12,81 @@ const KEV_CACHE = path.join(REFERENCE_DIR, "cisa_kev.json");
 
 const NIST_URL =
   "https://csrc.nist.gov/CSRC/media/Projects/risk-management/800-53%20Downloads/800-53r5/NIST_SP-800-53_rev5_catalog_load.csv";
-const KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json";
+const KEV_URL =
+  "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json";
 
-// Gemini API initialization (requires GEMINI_API_KEY environment variable)
+// Gemini API initialization
 let geminiModel = null;
 
 async function getGeminiModel() {
   if (!geminiModel) {
     try {
       const apiKey = process.env.GEMINI_API_KEY;
+
       if (!apiKey) {
-        console.warn("GEMINI_API_KEY not set, falling back to template-based explanations");
+        console.warn(
+          "GEMINI_API_KEY not set, falling back to template-based explanations"
+        );
         return null;
       }
+
       const genAI = new GoogleGenerativeAI(apiKey);
-      geminiModel = genAI.getGenerativeModel({ model: "gemini-pro" });
+      geminiModel = genAI.getGenerativeModel({
+        model: "gemini-pro"
+      });
     } catch (err) {
-      console.error("Failed to initialize Gemini model, falling back to templates:", err.message);
-      geminiModel = false; // Mark as failed to avoid retrying
+      console.error(
+        "Failed to initialize Gemini model, falling back to templates:",
+        err.message
+      );
+      geminiModel = false;
     }
   }
+
   return geminiModel || null;
 }
 
 async function generateRiskExplanation(risk, hint) {
   const model = await getGeminiModel();
+
   if (!model) {
-    // Fallback to template-based explanation
     const factors = [];
-    if (boolYes(risk.asset.internet_exposed)) factors.push("internet-exposed");
-    if (risk.asset.criticality === "Critical") factors.push("critical business asset");
-    if (boolYes(risk.vulnerability.exploit_available)) factors.push("exploit available");
-    if (risk.threatIntel) factors.push(`${risk.threatIntel.threat_actor} campaign match`);
-    if (risk.threatIntel?.ransomware_association === "Yes") factors.push("ransomware-associated");
-    if (!boolYes(risk.asset.edrInstalled)) factors.push("no EDR");
-    if (risk.kevEntry) factors.push("CISA KEV listed");
-    return `Ranks here because ${factors.join(", ")} combine with ${risk.asset.business_service} business impact, making this more urgent than CVSS alone would show.`;
+
+    if (boolYes(risk.asset.internet_exposed)) {
+      factors.push("internet-exposed");
+    }
+
+    if (risk.asset.criticality === "Critical") {
+      factors.push("critical business asset");
+    }
+
+    if (boolYes(risk.vulnerability.exploit_available)) {
+      factors.push("exploit available");
+    }
+
+    if (risk.threatIntel) {
+      factors.push(`${risk.threatIntel.threat_actor} campaign match`);
+    }
+
+    if (risk.threatIntel?.ransomware_association === "Yes") {
+      factors.push("ransomware-associated");
+    }
+
+    if (!boolYes(risk.asset.edr_installed)) {
+      factors.push("no EDR");
+    }
+
+    if (risk.kevEntry) {
+      factors.push("CISA KEV listed");
+    }
+
+    return `Ranks here because ${factors.join(
+      ", "
+    )} combine with ${risk.asset.business_service} business impact, making this more urgent than CVSS alone would show.`;
   }
 
   try {
-    const prompt = `You are a cybersecurity risk analyst. Generate a concise 1-2 sentence explanation (max 180 characters) for why this cyber risk ranks high in priority. Be specific and actionable.
+    const prompt = `You are a cybersecurity risk analyst. Generate a concise 1-2 sentence explanation for why this cyber risk ranks high in priority. Use ONLY the evidence provided below. Do not invent CVEs, threat actors, campaigns, controls, or other facts.
 
 Risk Details:
 - Vulnerability: ${risk.vulnerability.name} (${risk.vulnerability.cve}, CVSS ${risk.vulnerability.cvss})
@@ -61,43 +96,96 @@ Risk Details:
 - EDR Installed: ${risk.asset.edrInstalled}
 - Exploit Available: ${risk.vulnerability.exploit_available}
 - Patch Available: ${risk.vulnerability.patch_available}
-${risk.threatIntel ? `- Threat Actor: ${risk.threatIntel.threat_actor} (Campaign: ${risk.threatIntel.campaign_name}, Ransomware: ${risk.threatIntel.ransomware_association})` : ""}
-${risk.kevEntry ? "- This CVE is in CISA's KEV (Known Exploited Vulnerabilities) catalog" : ""}
+${
+  risk.threatIntel
+    ? `- Threat Actor: ${risk.threatIntel.threat_actor} (Campaign: ${risk.threatIntel.campaign_name}, Ransomware: ${risk.threatIntel.ransomware_association})`
+    : ""
+}
+${
+  risk.kevEntry
+    ? "- This CVE is in CISA's KEV (Known Exploited Vulnerabilities) catalog"
+    : ""
+}
 ${hint ? `- Recommended Action: ${hint.recommended_action}` : ""}
 
 Provide only the explanation, no preamble.`;
 
     const result = await model.generateContent(prompt);
     const explanation = result.response.text().trim();
-    return explanation.slice(0, 360) + (explanation.length > 360 ? "..." : "");
+
+    return (
+      explanation.slice(0, 360) +
+      (explanation.length > 360 ? "..." : "")
+    );
   } catch (err) {
-    console.error("Gemini risk explanation generation failed, using fallback:", err.message);
+    console.error(
+      "Gemini risk explanation generation failed, using fallback:",
+      err.message
+    );
+
     const factors = [];
-    if (boolYes(risk.asset.internet_exposed)) factors.push("internet-exposed");
-    if (risk.asset.criticality === "Critical") factors.push("critical business asset");
-    if (boolYes(risk.vulnerability.exploit_available)) factors.push("exploit available");
-    if (risk.threatIntel) factors.push(`${risk.threatIntel.threat_actor} campaign match`);
-    if (risk.threatIntel?.ransomware_association === "Yes") factors.push("ransomware-associated");
-    if (!boolYes(risk.asset.edrInstalled)) factors.push("no EDR");
-    if (risk.kevEntry) factors.push("CISA KEV listed");
-    return `Ranks here because ${factors.join(", ")} combine with ${risk.asset.business_service} business impact, making this more urgent than CVSS alone would show.`;
+
+    if (boolYes(risk.asset.internet_exposed)) {
+      factors.push("internet-exposed");
+    }
+
+    if (risk.asset.criticality === "Critical") {
+      factors.push("critical business asset");
+    }
+
+    if (boolYes(risk.vulnerability.exploit_available)) {
+      factors.push("exploit available");
+    }
+
+    if (risk.threatIntel) {
+      factors.push(`${risk.threatIntel.threat_actor} campaign match`);
+    }
+
+    if (risk.threatIntel?.ransomware_association === "Yes") {
+      factors.push("ransomware-associated");
+    }
+
+    if (!boolYes(risk.asset.edr_installed)) {
+      factors.push("no EDR");
+    }
+
+    if (risk.kevEntry) {
+      factors.push("CISA KEV listed");
+    }
+
+    return `Ranks here because ${factors.join(
+      ", "
+    )} combine with ${risk.asset.business_service} business impact, making this more urgent than CVSS alone would show.`;
   }
 }
 
 async function generateNistControlSummary(control) {
   const model = await getGeminiModel();
-  
-  // Fallback to truncated text extraction
+
   const basicSummary = () => {
-    const text = `${control.text} ${control.discussion}`.replace(/\s+/g, " ").trim();
-    const firstSentence = text.split(/(?<=[.!?])\s+/).find((sentence) => sentence.length > 40) || text;
-    return firstSentence.slice(0, 360).replace(/\s+\S*$/, "") + (firstSentence.length > 360 ? "..." : "");
+    const text = `${control.text} ${control.discussion}`
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const firstSentence =
+      text
+        .split(/(?<=[.!?])\s+/)
+        .find((sentence) => sentence.length > 40) || text;
+
+    return (
+      firstSentence
+        .slice(0, 360)
+        .replace(/\s+\S*$/, "") +
+      (firstSentence.length > 360 ? "..." : "")
+    );
   };
 
-  if (!model) return basicSummary();
+  if (!model) {
+    return basicSummary();
+  }
 
   try {
-    const prompt = `You are a NIST SP 800-53 cybersecurity controls expert. Summarize this control in 1-2 sentences (max 250 characters) focusing on what it does and why it matters.
+    const prompt = `You are a NIST SP 800-53 cybersecurity controls expert. Summarize this control in 1-2 sentences focusing on what it does and why it matters.
 
 Control: ${control.id} - ${control.name}
 Text: ${control.text}
@@ -107,34 +195,56 @@ Provide only the summary, no preamble.`;
 
     const result = await model.generateContent(prompt);
     const summary = result.response.text().trim();
+
     return summary.slice(0, 360) + (summary.length > 360 ? "..." : "");
   } catch (err) {
-    console.error("Gemini control summary generation failed, using fallback:", err.message);
+    console.error(
+      "Gemini control summary generation failed, using fallback:",
+      err.message
+    );
+
     return basicSummary();
   }
 }
 
-// Embedding model initialization (lazy loaded on first use)
+// Embedding model initialization
 let embeddingModel = null;
 
 async function getEmbeddingModel() {
   if (!embeddingModel) {
     try {
       const { pipeline } = await import("@xenova/transformers");
-      embeddingModel = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+
+      embeddingModel = await pipeline(
+        "feature-extraction",
+        "Xenova/all-MiniLM-L6-v2"
+      );
     } catch (err) {
-      console.error("Failed to load embedding model, falling back to lexical retrieval:", err.message);
+      console.error(
+        "Failed to load embedding model, falling back to lexical retrieval:",
+        err.message
+      );
+
       embeddingModel = null;
     }
   }
+
   return embeddingModel;
 }
 
 async function getEmbedding(text) {
   const model = await getEmbeddingModel();
-  if (!model) return null;
+
+  if (!model) {
+    return null;
+  }
+
   try {
-    const output = await model(text, { pooling: "mean", normalize: true });
+    const output = await model(text, {
+      pooling: "mean",
+      normalize: true
+    });
+
     return Array.from(output.data);
   } catch (err) {
     console.error("Embedding generation failed:", err.message);
@@ -143,43 +253,93 @@ async function getEmbedding(text) {
 }
 
 function cosineSimilarity(vecA, vecB) {
-  if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
+  if (!vecA || !vecB || vecA.length !== vecB.length) {
+    return 0;
+  }
+
   let dotProduct = 0;
-  for (let i = 0; i < vecA.length; i++) dotProduct += vecA[i] * vecB[i];
+
+  for (let i = 0; i < vecA.length; i += 1) {
+    dotProduct += vecA[i] * vecB[i];
+  }
+
   return dotProduct;
 }
 
 async function readCsv(fileName) {
-  return parseCsv(await fs.readFile(path.join(DATA_DIR, fileName), "utf8"));
+  return parseCsv(
+    await fs.readFile(path.join(DATA_DIR, fileName), "utf8")
+  );
 }
 
 async function readDataPack() {
-  const [assets, vulnerabilities, threatIntel, businessServices, remediationHints, threatReport] =
-    await Promise.all([
-      readCsv("assets.csv"),
-      readCsv("vulnerabilities.csv"),
-      readCsv("threat_intelligence.csv"),
-      readCsv("business_services.csv"),
-      readCsv("remediation_guidance.csv"),
-      fs.readFile(path.join(DATA_DIR, "synthetic_threat_report.md"), "utf8")
-    ]);
+  const [
+    assets,
+    vulnerabilities,
+    threatIntel,
+    businessServices,
+    remediationHints,
+    threatReport
+  ] = await Promise.all([
+    readCsv("assets.csv"),
+    readCsv("vulnerabilities.csv"),
+    readCsv("threat_intelligence.csv"),
+    readCsv("business_services.csv"),
+    readCsv("remediation_guidance.csv"),
+    fs.readFile(
+      path.join(DATA_DIR, "synthetic_threat_report.md"),
+      "utf8"
+    )
+  ]);
 
-  return { assets, vulnerabilities, threatIntel, businessServices, remediationHints, threatReport };
+  return {
+    assets,
+    vulnerabilities,
+    threatIntel,
+    businessServices,
+    remediationHints,
+    threatReport
+  };
 }
 
 async function fetchText(url) {
-  const response = await fetch(url, { headers: { "user-agent": "hivepro-assignment-risk-assistant/1.0" } });
-  if (!response.ok) throw new Error(`Failed to retrieve ${url}: HTTP ${response.status}`);
+  const response = await fetch(url, {
+    headers: {
+      "user-agent": "hivepro-assignment-risk-assistant/1.0"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to retrieve ${url}: HTTP ${response.status}`
+    );
+  }
+
   return response.text();
 }
 
 async function refreshReferences() {
   await fs.mkdir(REFERENCE_DIR, { recursive: true });
-  const [nistCsv, kevJson] = await Promise.all([fetchText(NIST_URL), fetchText(KEV_URL)]);
-  await Promise.all([fs.writeFile(NIST_CACHE, nistCsv), fs.writeFile(KEV_CACHE, kevJson)]);
+
+  const [nistCsv, kevJson] = await Promise.all([
+    fetchText(NIST_URL),
+    fetchText(KEV_URL)
+  ]);
+
+  await Promise.all([
+    fs.writeFile(NIST_CACHE, nistCsv),
+    fs.writeFile(KEV_CACHE, kevJson)
+  ]);
+
   return {
-    nist: { source: NIST_URL, bytes: Buffer.byteLength(nistCsv) },
-    cisaKev: { source: KEV_URL, bytes: Buffer.byteLength(kevJson) }
+    nist: {
+      source: NIST_URL,
+      bytes: Buffer.byteLength(nistCsv)
+    },
+    cisaKev: {
+      source: KEV_URL,
+      bytes: Buffer.byteLength(kevJson)
+    }
   };
 }
 
@@ -189,59 +349,91 @@ let cachedKevJson = null;
 
 async function ensureReferences(refresh = false) {
   try {
-    if (refresh) throw new Error("refresh requested");
+    if (refresh) {
+      throw new Error("refresh requested");
+    }
+
     const [nistCsv, kevJson] = await Promise.all([
       fs.readFile(NIST_CACHE, "utf8"),
       fs.readFile(KEV_CACHE, "utf8")
     ]);
-    
-    // Return cached references if input hasn't changed
-    if (cachedReferences && cachedNistCsv === nistCsv && cachedKevJson === kevJson) {
+
+    if (
+      cachedReferences &&
+      cachedNistCsv === nistCsv &&
+      cachedKevJson === kevJson
+    ) {
       return cachedReferences;
     }
-    
-    const references = await parseReferences(nistCsv, kevJson, false);
+
+    const references = await parseReferences(
+      nistCsv,
+      kevJson,
+      false
+    );
+
     cachedReferences = references;
     cachedNistCsv = nistCsv;
     cachedKevJson = kevJson;
+
     return references;
   } catch (_) {
     const result = await refreshReferences();
+
     const [nistCsv, kevJson] = await Promise.all([
       fs.readFile(NIST_CACHE, "utf8"),
       fs.readFile(KEV_CACHE, "utf8")
     ]);
-    const references = { ...await parseReferences(nistCsv, kevJson, true), refreshResult: result };
+
+    const references = {
+      ...(await parseReferences(nistCsv, kevJson, true)),
+      refreshResult: result
+    };
+
     cachedReferences = references;
     cachedNistCsv = nistCsv;
     cachedKevJson = kevJson;
+
     return references;
   }
 }
 
-async function parseReferences(nistCsv, kevJson, refreshed) {
+async function parseReferences(
+  nistCsv,
+  kevJson,
+  refreshed
+) {
   const controls = parseCsv(nistCsv).map((control) => ({
     id: control.identifier,
     name: control.name,
     text: control.control_text || "",
     discussion: control.discussion || "",
     related: control.related || "",
-    embedding: null // Will be populated with embeddings
+    embedding: null
   }));
 
-  // Compute embeddings for NIST controls in parallel for semantic retrieval
+  // Compute embeddings for NIST controls for semantic retrieval
   const model = await getEmbeddingModel();
+
   if (model) {
     await Promise.all(
       controls.map(async (control) => {
         const controlText = `${control.id} ${control.name} ${control.text} ${control.discussion}`;
+
         control.embedding = await getEmbedding(controlText);
       })
     );
   }
 
   const kev = JSON.parse(kevJson);
-  const kevByCve = new Map((kev.vulnerabilities || []).map((item) => [item.cveID, item]));
+
+  const kevByCve = new Map(
+    (kev.vulnerabilities || []).map((item) => [
+      item.cveID,
+      item
+    ])
+  );
+
   return {
     controls,
     kevByCve,
@@ -267,57 +459,144 @@ function boolYes(value) {
 
 function serviceScore(service) {
   let score = 0;
-  if (!service) return score;
-  if (service.risk_appetite === "Very Low") score += 12;
-  if (service.risk_appetite === "Low") score += 7;
-  if (service.revenue_impact === "Critical") score += 12;
-  if (service.revenue_impact === "High") score += 8;
-  if (boolYes(service.customer_facing)) score += 6;
-  if (Number(service.rto_hours) <= 1) score += 6;
-  if (service.compliance_scope) score += service.compliance_scope.includes("PCI") ? 8 : 4;
+
+  if (!service) {
+    return score;
+  }
+
+  if (service.risk_appetite === "Very Low") {
+    score += 12;
+  }
+
+  if (service.risk_appetite === "Low") {
+    score += 7;
+  }
+
+  if (service.revenue_impact === "Critical") {
+    score += 12;
+  }
+
+  if (service.revenue_impact === "High") {
+    score += 8;
+  }
+
+  if (boolYes(service.customer_facing)) {
+    score += 6;
+  }
+
+  if (Number(service.rto_hours) <= 1) {
+    score += 6;
+  }
+
+  if (service.compliance_scope) {
+    score += service.compliance_scope.includes("PCI")
+      ? 8
+      : 4;
+  }
+
   return score;
 }
 
 function criticalityScore(asset) {
-  if (asset.criticality === "Critical") return 12;
-  if (asset.criticality === "High") return 8;
-  if (asset.criticality === "Medium") return 4;
+  if (asset.criticality === "Critical") {
+    return 12;
+  }
+
+  if (asset.criticality === "High") {
+    return 8;
+  }
+
+  if (asset.criticality === "Medium") {
+    return 4;
+  }
+
   return 1;
 }
 
 function exploitScore(vulnerability, intel, kevEntry) {
   let score = 0;
-  if (boolYes(vulnerability.exploit_available)) score += 16;
-  if (normalize(vulnerability.auth_required) === "no") score += 6;
-  if (intel?.exploit_maturity === "Weaponized") score += 16;
-  if (intel?.ransomware_association === "Yes") score += 14;
-  if (kevEntry) score += 10;
-  if (kevEntry?.knownRansomwareCampaignUse === "Known") score += 12;
+
+  if (boolYes(vulnerability.exploit_available)) {
+    score += 16;
+  }
+
+  if (normalize(vulnerability.auth_required) === "no") {
+    score += 6;
+  }
+
+  if (intel?.exploit_maturity === "Weaponized") {
+    score += 16;
+  }
+
+  if (intel?.ransomware_association === "Yes") {
+    score += 14;
+  }
+
+  if (kevEntry) {
+    score += 10;
+  }
+
+  if (kevEntry?.knownRansomwareCampaignUse === "Known") {
+    score += 12;
+  }
+
   return score;
 }
 
 function missingControlScore(asset, vulnerability) {
   let score = 0;
-  if (!boolYes(asset.edr_installed)) score += 12;
-  if (Number(asset.last_seen_days) > 14) score += 4;
-  if (!boolYes(vulnerability.patch_available)) score += 4;
-  if (Number(vulnerability.days_open) > 30) score += 4;
-  if (Number(vulnerability.days_open) > 90) score += 3;
+
+  if (!boolYes(asset.edr_installed)) {
+    score += 12;
+  }
+
+  if (Number(asset.last_seen_days) > 14) {
+    score += 4;
+  }
+
+  if (!boolYes(vulnerability.patch_available)) {
+    score += 4;
+  }
+
+  if (Number(vulnerability.days_open) > 30) {
+    score += 4;
+  }
+
+  if (Number(vulnerability.days_open) > 90) {
+    score += 3;
+  }
+
   return score;
 }
 
-function findRemediationHint(remediationHints, vulnerability) {
-  const haystack = normalize(`${vulnerability.vulnerability_name} ${vulnerability.affected_component}`);
+function findRemediationHint(
+  remediationHints,
+  vulnerability
+) {
+  const haystack = normalize(
+    `${vulnerability.vulnerability_name} ${vulnerability.affected_component}`
+  );
+
   let best = null;
   let bestScore = 0;
+
   for (const hint of remediationHints) {
-    const words = normalize(hint.finding_type).split(/\s+/).filter((word) => word.length > 3);
-    const score = words.reduce((total, word) => total + (haystack.includes(word) ? 1 : 0), 0);
+    const words = normalize(hint.finding_type)
+      .split(/\s+/)
+      .filter((word) => word.length > 3);
+
+    const score = words.reduce(
+      (total, word) =>
+        total + (haystack.includes(word) ? 1 : 0),
+      0
+    );
+
     if (score > bestScore) {
       best = hint;
       bestScore = score;
     }
   }
+
   return best;
 }
 
@@ -330,8 +609,11 @@ function tokenSet(text) {
   );
 }
 
-async function retrieveNistControl(controls, risk, hint) {
-  // Build semantic query from risk context
+async function retrieveNistControl(
+  controls,
+  risk,
+  hint
+) {
   const query = [
     risk.vulnerability.vulnerability_name,
     risk.vulnerability.affected_component,
@@ -342,16 +624,22 @@ async function retrieveNistControl(controls, risk, hint) {
     .filter(Boolean)
     .join(" ");
 
-  // Try embeddings-based retrieval first
   const queryEmbedding = await getEmbedding(query);
+
   let best = null;
   let bestScore = -Infinity;
 
   if (queryEmbedding) {
-    // Semantic retrieval: rank controls by cosine similarity to query embedding
     for (const control of controls) {
-      if (!control.embedding) continue;
-      const similarity = cosineSimilarity(queryEmbedding, control.embedding);
+      if (!control.embedding) {
+        continue;
+      }
+
+      const similarity = cosineSimilarity(
+        queryEmbedding,
+        control.embedding
+      );
+
       if (similarity > bestScore) {
         bestScore = similarity;
         best = control;
@@ -359,7 +647,8 @@ async function retrieveNistControl(controls, risk, hint) {
     }
   }
 
-  // Fallback to lexical matching if embeddings unavailable or score too low
+  // Fallback to lexical retrieval when embeddings are unavailable
+  // or semantic confidence is too low.
   if (!best || bestScore < 0.3) {
     const lowerQuery = normalize(query);
     const queryTokens = tokenSet(query);
@@ -368,20 +657,59 @@ async function retrieveNistControl(controls, risk, hint) {
     let lexicalBestScore = 0;
 
     for (const control of controls) {
-      const controlTokens = tokenSet(`${control.id} ${control.name} ${control.text} ${control.discussion}`);
+      const controlTokens = tokenSet(
+        `${control.id} ${control.name} ${control.text} ${control.discussion}`
+      );
+
       let score = 0;
 
-      // Token overlap scoring
       for (const token of queryTokens) {
-        if (controlTokens.has(token)) score += 1;
+        if (controlTokens.has(token)) {
+          score += 1;
+        }
       }
 
-      // Context-aware boosts for common remediation patterns
-      if (risk.threatIntel?.ransomware_association === "Yes" && control.id === "IR-4") score += 6;
-      if (!boolYes(risk.asset.edr_installed) && control.id === "RA-5") score += 3;
-      if (/auth|account|credential|token|mfa/.test(lowerQuery) && control.id === "AC-2") score += 5;
-      if (/patch|rce|cve|vulnerability|flaw/.test(lowerQuery) && control.id === "SI-2") score += 5;
-      if (/jenkins|teamcity|unsupported|build/.test(lowerQuery) && control.id === "SA-22") score += 5;
+      // Context-aware fallback boosts
+      if (
+        risk.threatIntel?.ransomware_association === "Yes" &&
+        control.id === "IR-4"
+      ) {
+        score += 6;
+      }
+
+      if (
+        !boolYes(risk.asset.edr_installed) &&
+        control.id === "RA-5"
+      ) {
+        score += 3;
+      }
+
+      if (
+        /auth|account|credential|token|mfa/.test(
+          lowerQuery
+        ) &&
+        control.id === "AC-2"
+      ) {
+        score += 5;
+      }
+
+      if (
+        /patch|rce|cve|vulnerability|flaw/.test(
+          lowerQuery
+        ) &&
+        control.id === "SI-2"
+      ) {
+        score += 5;
+      }
+
+      if (
+        /jenkins|teamcity|unsupported|build/.test(
+          lowerQuery
+        ) &&
+        control.id === "SA-22"
+      ) {
+        score += 5;
+      }
 
       if (score > lexicalBestScore) {
         lexicalBestScore = score;
@@ -389,153 +717,380 @@ async function retrieveNistControl(controls, risk, hint) {
       }
     }
 
-    best = lexicalBest || controls.find((control) => control.id === "SI-2");
+    best =
+      lexicalBest ||
+      controls.find((control) => control.id === "SI-2");
   }
 
   const summary = await generateNistControlSummary(best);
+
   return {
     id: best.id,
     name: best.name,
-    summary: summary,
+    summary,
     source: NIST_URL,
-    retrievalMethod: queryEmbedding && bestScore >= 0.3 ? "embeddings" : "lexical"
+    retrievalMethod:
+      queryEmbedding && bestScore >= 0.3
+        ? "embeddings"
+        : "lexical"
   };
 }
 
 function summarizeControl(control) {
-  const text = `${control.text} ${control.discussion}`.replace(/\s+/g, " ").trim();
-  const firstSentence = text.split(/(?<=[.!?])\s+/).find((sentence) => sentence.length > 40) || text;
-  return firstSentence.slice(0, 360).replace(/\s+\S*$/, "") + (firstSentence.length > 360 ? "..." : "");
+  const text =
+    `${control.text} ${control.discussion}`
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const firstSentence =
+    text
+      .split(/(?<=[.!?])\s+/)
+      .find((sentence) => sentence.length > 40) ||
+    text;
+
+  return (
+    firstSentence
+      .slice(0, 360)
+      .replace(/\s+\S*$/, "") +
+    (firstSentence.length > 360 ? "..." : "")
+  );
 }
 
 function buildRiskSentence(risk) {
   const factors = [];
-  if (boolYes(risk.asset.internet_exposed)) factors.push("internet-exposed");
-  if (risk.asset.criticality === "Critical") factors.push("critical business asset");
-  if (boolYes(risk.vulnerability.exploit_available)) factors.push("exploit available");
-  if (risk.threatIntel) factors.push(`${risk.threatIntel.threat_actor} campaign match`);
-  if (risk.threatIntel?.ransomware_association === "Yes") factors.push("ransomware-associated");
-  if (!boolYes(risk.asset.edr_installed)) factors.push("no EDR");
-  if (risk.kevEntry) factors.push("CISA KEV listed");
 
-  return `Ranks here because ${factors.join(", ")} combine with ${risk.asset.business_service} business impact, making this more urgent than CVSS alone would show.`;
+  if (boolYes(risk.asset.internet_exposed)) {
+    factors.push("internet-exposed");
+  }
+
+  if (risk.asset.criticality === "Critical") {
+    factors.push("critical business asset");
+  }
+
+  if (boolYes(risk.vulnerability.exploit_available)) {
+    factors.push("exploit available");
+  }
+
+  if (risk.threatIntel) {
+    factors.push(
+      `${risk.threatIntel.threat_actor} campaign match`
+    );
+  }
+
+  if (risk.threatIntel?.ransomware_association === "Yes") {
+    factors.push("ransomware-associated");
+  }
+
+  if (!boolYes(risk.asset.edr_installed)) {
+    factors.push("no EDR");
+  }
+
+  if (risk.kevEntry) {
+    factors.push("CISA KEV listed");
+  }
+
+  return `Ranks here because ${factors.join(
+    ", "
+  )} combine with ${risk.asset.business_service} business impact, making this more urgent than CVSS alone would show.`;
 }
 
-async function generateRiskReport({ refresh = false } = {}) {
+async function generateRiskReport(
+  { refresh = false } = {}
+) {
   const data = await readDataPack();
   const references = await ensureReferences(refresh);
-  const assetById = new Map(data.assets.map((asset) => [asset.asset_id, asset]));
-  const serviceByName = new Map(data.businessServices.map((service) => [service.business_service, service]));
-  const intelByCve = new Map(data.threatIntel.map((intel) => [intel.matched_cve_or_control, intel]));
+
+  const assetById = new Map(
+    data.assets.map((asset) => [
+      asset.asset_id,
+      asset
+    ])
+  );
+
+  const serviceByName = new Map(
+    data.businessServices.map((service) => [
+      service.business_service,
+      service
+    ])
+  );
+
+  const intelByCve = new Map(
+    data.threatIntel.map((intel) => [
+      intel.matched_cve_or_control,
+      intel
+    ])
+  );
 
   const risks = data.vulnerabilities
-    .filter((vulnerability) => vulnerability.status === "Open")
+    .filter(
+      (vulnerability) =>
+        vulnerability.status === "Open"
+    )
     .map((vulnerability) => {
-      const asset = assetById.get(vulnerability.asset_id) || {};
-      const service = serviceByName.get(asset.business_service) || {};
-      const threatIntel = intelByCve.get(vulnerability.cve);
-      const kevEntry = references.kevByCve.get(vulnerability.cve);
-      const cvss = Number(vulnerability.cvss);
-      const score =
+      const asset =
+        assetById.get(vulnerability.asset_id) || {};
+
+      const service =
+        serviceByName.get(
+          asset.business_service
+        ) || {};
+
+      const threatIntel =
+        intelByCve.get(vulnerability.cve);
+
+      const kevEntry =
+        references.kevByCve.get(
+          vulnerability.cve
+        );
+
+      const cvss =
+        Number(vulnerability.cvss);
+
+      // Existing scoring model.
+      const rawScore =
         cvss * 4 +
-        (boolYes(asset.internet_exposed) || vulnerability.asset_exposure === "Internet" ? 18 : 0) +
+        (boolYes(asset.internet_exposed) ||
+        vulnerability.asset_exposure === "Internet"
+          ? 18
+          : 0) +
         criticalityScore(asset) +
         serviceScore(service) +
-        exploitScore(vulnerability, threatIntel, kevEntry) +
-        missingControlScore(asset, vulnerability);
+        exploitScore(
+          vulnerability,
+          threatIntel,
+          kevEntry
+        ) +
+        missingControlScore(
+          asset,
+          vulnerability
+        );
 
-      return { vulnerability, asset, service, threatIntel, kevEntry, score: Number(score.toFixed(1)) };
+      // Normalize raw score to 0–100.
+      const MAX_RISK_SCORE = 215;
+
+      const score = Math.min(
+        100,
+        (rawScore / MAX_RISK_SCORE) * 100
+      );
+
+      return {
+        vulnerability,
+        asset,
+        service,
+        threatIntel,
+        kevEntry,
+        rawScore: Number(
+          rawScore.toFixed(1)
+        ),
+        score: Number(
+          score.toFixed(1)
+        )
+      };
     })
     .sort((a, b) => b.score - a.score);
 
   const topRisks = await Promise.all(
-    risks.slice(0, 5).map(async (risk, index) => {
-      const hint = findRemediationHint(data.remediationHints, risk.vulnerability);
-      const nistControl = await retrieveNistControl(references.controls, risk, hint);
-      return {
-      rank: index + 1,
-      score: risk.score,
-      asset: {
-        id: risk.asset.asset_id,
-        name: risk.asset.asset_name,
-        type: risk.asset.asset_type,
-        owner: risk.asset.owner_team || "Unassigned",
-        internetExposed: risk.asset.internet_exposed,
-        criticality: risk.asset.criticality,
-        edrInstalled: risk.asset.edr_installed,
-        location: risk.asset.location
-      },
-      vulnerability: {
-        id: risk.vulnerability.vuln_id,
-        name: risk.vulnerability.vulnerability_name,
-        cve: risk.vulnerability.cve,
-        cvss: risk.vulnerability.cvss,
-        exploitAvailable: risk.vulnerability.exploit_available,
-        patchAvailable: risk.vulnerability.patch_available,
-        daysOpen: risk.vulnerability.days_open,
-        affectedComponent: risk.vulnerability.affected_component
-      },
-      threatIntel: risk.threatIntel
-        ? {
-            id: risk.threatIntel.intel_id,
-            actor: risk.threatIntel.threat_actor,
-            campaign: risk.threatIntel.campaign_name,
-            ransomware: risk.threatIntel.ransomware_association,
-            confidence: risk.threatIntel.confidence,
-            summary: risk.threatIntel.summary
-          }
-        : null,
-      cisaKev: risk.kevEntry
-        ? {
-            dateAdded: risk.kevEntry.dateAdded,
-            ransomwareUse: risk.kevEntry.knownRansomwareCampaignUse,
-            requiredAction: risk.kevEntry.requiredAction
-          }
-        : null,
-      businessService: {
-        name: risk.asset.business_service,
-        owner: risk.service.business_owner,
-        impact: risk.service.business_impact,
-        complianceScope: risk.service.compliance_scope,
-        revenueImpact: risk.service.revenue_impact,
-        rtoHours: risk.service.rto_hours
-      },
-      why: await generateRiskExplanation(risk, hint),
-      remediation: {
-        nistControl,
-        operationalHint: hint
-          ? {
-              action: hint.recommended_action,
-              validationEvidence: hint.validation_evidence
+    risks.slice(0, 5).map(
+      async (risk, index) => {
+        const hint =
+          findRemediationHint(
+            data.remediationHints,
+            risk.vulnerability
+          );
+
+        const nistControl =
+          await retrieveNistControl(
+            references.controls,
+            risk,
+            hint
+          );
+
+        return {
+          rank: index + 1,
+
+          score: risk.score,
+
+          rawScore: risk.rawScore,
+
+          asset: {
+            id: risk.asset.asset_id,
+            name: risk.asset.asset_name,
+            type: risk.asset.asset_type,
+            owner:
+              risk.asset.owner_team ||
+              "Unassigned",
+            internetExposed:
+              risk.asset.internet_exposed,
+            criticality:
+              risk.asset.criticality,
+            edrInstalled:
+              risk.asset.edr_installed,
+            location:
+              risk.asset.location
+          },
+
+          vulnerability: {
+            id: risk.vulnerability.vuln_id,
+            name:
+              risk.vulnerability.vulnerability_name,
+            cve: risk.vulnerability.cve,
+            cvss: risk.vulnerability.cvss,
+            exploitAvailable:
+              risk.vulnerability
+                .exploit_available,
+            patchAvailable:
+              risk.vulnerability
+                .patch_available,
+            daysOpen:
+              risk.vulnerability.days_open,
+            affectedComponent:
+              risk.vulnerability
+                .affected_component
+          },
+
+          threatIntel: risk.threatIntel
+            ? {
+                id: risk.threatIntel.intel_id,
+                actor:
+                  risk.threatIntel
+                    .threat_actor,
+                campaign:
+                  risk.threatIntel
+                    .campaign_name,
+                ransomware:
+                  risk.threatIntel
+                    .ransomware_association,
+                confidence:
+                  risk.threatIntel
+                    .confidence,
+                summary:
+                  risk.threatIntel.summary
+              }
+            : null,
+
+          cisaKev: risk.kevEntry
+            ? {
+                dateAdded:
+                  risk.kevEntry.dateAdded,
+                ransomwareUse:
+                  risk.kevEntry
+                    .knownRansomwareCampaignUse,
+                requiredAction:
+                  risk.kevEntry.requiredAction
+              }
+            : null,
+
+          businessService: {
+            name:
+              risk.asset.business_service,
+            owner:
+              risk.service.business_owner,
+            impact:
+              risk.service.business_impact,
+            complianceScope:
+              risk.service
+                .compliance_scope,
+            revenueImpact:
+              risk.service.revenue_impact,
+            rtoHours:
+              risk.service.rto_hours
+          },
+
+          why: await generateRiskExplanation(
+            risk,
+            hint
+          ),
+
+          remediation: {
+            nistControl,
+            operationalHint: hint
+              ? {
+                  action:
+                    hint.recommended_action,
+                  validationEvidence:
+                    hint.validation_evidence
+                }
+              : null
+          },
+
+          evidence: {
+            rawRiskScore:
+              risk.rawScore,
+
+            normalizedRiskScore:
+              risk.score,
+
+            scoringFactors: {
+              cvssWeighted:
+                Number(
+                  risk.vulnerability.cvss
+                ) * 4,
+
+              internetExposure:
+                boolYes(
+                  risk.asset
+                    .internet_exposed
+                )
+                  ? 18
+                  : 0,
+
+              assetCriticality:
+                criticalityScore(
+                  risk.asset
+                ),
+
+              businessService:
+                serviceScore(
+                  risk.service
+                ),
+
+              exploitAndThreat:
+                exploitScore(
+                  risk.vulnerability,
+                  risk.threatIntel,
+                  risk.kevEntry
+                ),
+
+              missingControlsAndAge:
+                missingControlScore(
+                  risk.asset,
+                  risk.vulnerability
+                )
             }
-          : null
-      },
-      evidence: {
-        scoringFactors: {
-          cvssWeighted: Number(risk.vulnerability.cvss) * 4,
-          internetExposure: boolYes(risk.asset.internet_exposed) ? 18 : 0,
-          assetCriticality: criticalityScore(risk.asset),
-          businessService: serviceScore(risk.service),
-          exploitAndThreat: exploitScore(risk.vulnerability, risk.threatIntel, risk.kevEntry),
-          missingControlsAndAge: missingControlScore(risk.asset, risk.vulnerability)
-        }
+          }
+        };
       }
-    };
-    })
+    )
   );
 
   return {
-    generatedAt: new Date().toISOString(),
-    scenario: "TawasolPay cyber risk prioritization",
+    generatedAt:
+      new Date().toISOString(),
+
+    scenario:
+      "TawasolPay cyber risk prioritization",
+
     topRisks,
+
     dataSummary: {
       assets: data.assets.length,
-      vulnerabilities: data.vulnerabilities.length,
-      threatIntel: data.threatIntel.length,
-      businessServices: data.businessServices.length
+      vulnerabilities:
+        data.vulnerabilities.length,
+      threatIntel:
+        data.threatIntel.length,
+      businessServices:
+        data.businessServices.length
     },
-    referenceProvenance: references.provenance
+
+    referenceProvenance:
+      references.provenance
   };
 }
 
-module.exports = { generateRiskReport, refreshReferences, getEmbeddingModel, NIST_URL, KEV_URL };
+module.exports = {
+  generateRiskReport,
+  refreshReferences,
+  getEmbeddingModel,
+  NIST_URL,
+  KEV_URL
+};
