@@ -1,0 +1,19 @@
+# fly.toml app configuration file generated
+
+app = "hivepro-ai-risk-assistant"
+primary_region = "ord"
+
+[build]
+  builder = "heroku"
+
+[env]
+  NODE_ENV = "production"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+
+[[vm]]
+  size = "shared-cpu-1x"

@@ -13,19 +13,40 @@ const NIST_URL =
   "https://csrc.nist.gov/CSRC/media/Projects/risk-management/800-53%20Downloads/800-53r5/NIST_SP-800-53_rev5_catalog_load.csv";
 const KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json";
 
-const CONTROL_HINTS = {
-  default: ["SI-2", "RA-5"],
-  vpn: ["SI-2", "AC-2", "IR-4"],
-  authentication: ["AC-2", "SI-2"],
-  api: ["SI-2", "AC-2", "RA-5"],
-  ransomware: ["IR-4", "SI-2"],
-  "project management": ["SI-2", "AC-2", "RA-5"],
-  confluence: ["SI-2", "AC-2", "RA-5"],
-  jenkins: ["SA-22", "SI-2", "RA-5"],
-  teamcity: ["SA-22", "SI-2", "RA-5"],
-  citrix: ["SI-2", "IR-4", "AC-2"],
-  unsupported: ["SA-22", "SI-2"]
-};
+// Embedding model initialization (lazy loaded on first use)
+let embeddingModel = null;
+
+async function getEmbeddingModel() {
+  if (!embeddingModel) {
+    try {
+      const { pipeline } = await import("@xenova/transformers");
+      embeddingModel = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+    } catch (err) {
+      console.error("Failed to load embedding model, falling back to lexical retrieval:", err.message);
+      embeddingModel = null;
+    }
+  }
+  return embeddingModel;
+}
+
+async function getEmbedding(text) {
+  const model = await getEmbeddingModel();
+  if (!model) return null;
+  try {
+    const output = await model(text, { pooling: "mean", normalize: true });
+    return Array.from(output.data);
+  } catch (err) {
+    console.error("Embedding generation failed:", err.message);
+    return null;
+  }
+}
+
+function cosineSimilarity(vecA, vecB) {
+  if (!vecA || !vecB || vecA.length !== vecB.length) return 0;
+  let dotProduct = 0;
+  for (let i = 0; i < vecA.length; i++) dotProduct += vecA[i] * vecB[i];
+  return dotProduct;
+}
 
 async function readCsv(fileName) {
   return parseCsv(await fs.readFile(path.join(DATA_DIR, fileName), "utf8"));
@@ -79,14 +100,26 @@ async function ensureReferences(refresh = false) {
   }
 }
 
-function parseReferences(nistCsv, kevJson, refreshed) {
+async function parseReferences(nistCsv, kevJson, refreshed) {
   const controls = parseCsv(nistCsv).map((control) => ({
     id: control.identifier,
     name: control.name,
     text: control.control_text || "",
     discussion: control.discussion || "",
-    related: control.related || ""
+    related: control.related || "",
+    embedding: null // Will be populated with embeddings
   }));
+
+  // Compute embeddings for NIST controls in parallel for semantic retrieval
+  const model = await getEmbeddingModel();
+  if (model) {
+    await Promise.all(
+      controls.map(async (control) => {
+        const controlText = `${control.id} ${control.name} ${control.text} ${control.discussion}`;
+        control.embedding = await getEmbedding(controlText);
+      })
+    );
+  }
 
   const kev = JSON.parse(kevJson);
   const kevByCve = new Map((kev.vulnerabilities || []).map((item) => [item.cveID, item]));
@@ -97,6 +130,7 @@ function parseReferences(nistCsv, kevJson, refreshed) {
       nistUrl: NIST_URL,
       kevUrl: KEV_URL,
       refreshed,
+      retrievalMethod: model ? "embeddings" : "lexical",
       kevCatalogVersion: kev.catalogVersion,
       kevDateReleased: kev.dateReleased,
       kevCount: kev.count
@@ -177,42 +211,74 @@ function tokenSet(text) {
   );
 }
 
-function retrieveNistControl(controls, risk, hint) {
+async function retrieveNistControl(controls, risk, hint) {
+  // Build semantic query from risk context
   const query = [
     risk.vulnerability.vulnerability_name,
     risk.vulnerability.affected_component,
     risk.asset.asset_type,
     risk.threatIntel?.summary,
     hint?.recommended_action
-  ].join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 
-  const lowerQuery = normalize(query);
-  const candidateIds = new Set(CONTROL_HINTS.default);
-  for (const [keyword, ids] of Object.entries(CONTROL_HINTS)) {
-    if (keyword !== "default" && lowerQuery.includes(keyword)) ids.forEach((id) => candidateIds.add(id));
+  // Try embeddings-based retrieval first
+  const queryEmbedding = await getEmbedding(query);
+  let best = null;
+  let bestScore = -Infinity;
+
+  if (queryEmbedding) {
+    // Semantic retrieval: rank controls by cosine similarity to query embedding
+    for (const control of controls) {
+      if (!control.embedding) continue;
+      const similarity = cosineSimilarity(queryEmbedding, control.embedding);
+      if (similarity > bestScore) {
+        bestScore = similarity;
+        best = control;
+      }
+    }
   }
 
-  const queryTokens = tokenSet(query);
-  const candidates = controls.filter((control) => candidateIds.has(control.id));
-  const scored = candidates.map((control) => {
-    const controlTokens = tokenSet(`${control.id} ${control.name} ${control.text} ${control.discussion}`);
-    let score = candidateIds.has(control.id) ? 4 : 0;
-    for (const token of queryTokens) if (controlTokens.has(token)) score += 1;
-    if (risk.threatIntel?.ransomware_association === "Yes" && control.id === "IR-4") score += 6;
-    if (!boolYes(risk.asset.edr_installed) && control.id === "RA-5") score += 3;
-    if (/auth|account|credential|token|mfa/.test(lowerQuery) && control.id === "AC-2") score += 5;
-    if (/patch|rce|cve|vulnerability|flaw/.test(lowerQuery) && control.id === "SI-2") score += 5;
-    if (/jenkins|teamcity|unsupported|build/.test(lowerQuery) && control.id === "SA-22") score += 5;
-    return { control, score };
-  });
+  // Fallback to lexical matching if embeddings unavailable or score too low
+  if (!best || bestScore < 0.3) {
+    const lowerQuery = normalize(query);
+    const queryTokens = tokenSet(query);
 
-  scored.sort((a, b) => b.score - a.score || a.control.id.localeCompare(b.control.id));
-  const best = scored[0]?.control || controls.find((control) => control.id === "SI-2");
+    let lexicalBest = null;
+    let lexicalBestScore = 0;
+
+    for (const control of controls) {
+      const controlTokens = tokenSet(`${control.id} ${control.name} ${control.text} ${control.discussion}`);
+      let score = 0;
+
+      // Token overlap scoring
+      for (const token of queryTokens) {
+        if (controlTokens.has(token)) score += 1;
+      }
+
+      // Context-aware boosts for common remediation patterns
+      if (risk.threatIntel?.ransomware_association === "Yes" && control.id === "IR-4") score += 6;
+      if (!boolYes(risk.asset.edr_installed) && control.id === "RA-5") score += 3;
+      if (/auth|account|credential|token|mfa/.test(lowerQuery) && control.id === "AC-2") score += 5;
+      if (/patch|rce|cve|vulnerability|flaw/.test(lowerQuery) && control.id === "SI-2") score += 5;
+      if (/jenkins|teamcity|unsupported|build/.test(lowerQuery) && control.id === "SA-22") score += 5;
+
+      if (score > lexicalBestScore) {
+        lexicalBestScore = score;
+        lexicalBest = control;
+      }
+    }
+
+    best = lexicalBest || controls.find((control) => control.id === "SI-2");
+  }
+
   return {
     id: best.id,
     name: best.name,
     summary: summarizeControl(best),
-    source: NIST_URL
+    source: NIST_URL,
+    retrievalMethod: queryEmbedding && bestScore >= 0.3 ? "embeddings" : "lexical"
   };
 }
 
@@ -262,10 +328,11 @@ async function generateRiskReport({ refresh = false } = {}) {
     })
     .sort((a, b) => b.score - a.score);
 
-  const topRisks = risks.slice(0, 5).map((risk, index) => {
-    const hint = findRemediationHint(data.remediationHints, risk.vulnerability);
-    const nistControl = retrieveNistControl(references.controls, risk, hint);
-    return {
+  const topRisks = await Promise.all(
+    risks.slice(0, 5).map(async (risk, index) => {
+      const hint = findRemediationHint(data.remediationHints, risk.vulnerability);
+      const nistControl = await retrieveNistControl(references.controls, risk, hint);
+      return {
       rank: index + 1,
       score: risk.score,
       asset: {
@@ -334,7 +401,8 @@ async function generateRiskReport({ refresh = false } = {}) {
         }
       }
     };
-  });
+    })
+  );
 
   return {
     generatedAt: new Date().toISOString(),

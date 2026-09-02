@@ -9,6 +9,9 @@
     "test": "node tests/riskEngine.test.js",
     "refresh:references": "node scripts/download-references.js"
   },
+  "dependencies": {
+    "@xenova/transformers": "^2.6.0"
+  },
   "engines": {
     "node": ">=20"
   },
