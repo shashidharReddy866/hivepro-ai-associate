@@ -2,10 +2,26 @@
 
 Working system for the HivePro AI Associate take-home assignment. It ingests the provided asset, vulnerability, threat intelligence, remediation hint, business service, and MDR advisory data, then produces a ranked top-5 cyber risk list with evidence and NIST SP 800-53 Rev. 5 remediation guidance.
 
+## 🚀 Deploy to Public URL (2 Minutes)
+
+Click the button below to deploy to Railway with a public URL:
+
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template/jREfnB?referralCode=shashidhar)
+
+Or deploy manually in 2 clicks:
+1. Go to https://railway.app/new
+2. Click **Deploy from GitHub**
+3. Authorize Railway and select `hivepro-ai-associate` repository
+4. Railway automatically assigns a public URL (check the Railway dashboard once deployment completes)
+
+**Result**: App accessible at `https://<your-app-name>.up.railway.app` with live embeddings-based NIST retrieval.
+
+---
+
 ## Run Locally
 
 ```bash
-npm.cmd start
+npm start
 ```
 
 Open `http://localhost:3000`.
@@ -61,42 +77,12 @@ The biggest gap is an evaluation harness with expected top-risk fixtures and con
 
 **Repository**: https://github.com/shashidharReddy866/hivepro-ai-associate
 
-### Deploy to Railway (Recommended - Free, 1 Click)
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed step-by-step instructions for Railway, Render, or Fly.io.
 
-1. Go to https://railway.app/new
-2. Click "Deploy from GitHub"
-3. Authorize Railway to access your GitHub account
-4. Select the `hivepro-ai-associate` repository
-5. Click "Deploy Now"
-6. Wait ~2 minutes for the app to build and start
-7. Railway will assign a public URL automatically (visible in the Railway dashboard)
+**Quick Summary**:
+- **Railway** (recommended): Go to https://railway.app/new → "Deploy from GitHub" → Select repo → Done (2 min)
+- **Render**: Similar process, go to https://dashboard.render.com/
+- **Fly.io**: Use CLI (`flyctl login` → `flyctl deploy`)
 
-Railway provides 500 free compute hours/month, which is more than enough for this deployment.
-
-### Deploy to Render (Free Tier)
-
-1. Go to https://dashboard.render.com/
-2. Click "New +" → "Web Service"
-3. Connect your GitHub account and select `hivepro-ai-associate`
-4. Configure:
-   - **Name**: `hivepro-ai-risk-assistant`
-   - **Runtime**: `Node`
-   - **Build Command**: `npm install`
-   - **Start Command**: `npm start`
-5. Click "Create Web Service"
-6. Render will build and deploy automatically (watch the logs)
-
-### Deploy to Fly.io
-
-Requires Fly CLI (`brew install flyctl` or https://fly.io/docs/hands-on/install-flyctl/):
-
-```bash
-flyctl auth login
-flyctl launch
-flyctl deploy
-```
-
-### Local Development
-
-For local development, `npm start` runs the server on port 3000. The dashboard fetches data from `/api/risks` which computes embeddings on startup (30-60 seconds first load), then serves subsequent requests in <2 seconds.
+All platforms provide free tiers and automatic public URLs.
 
