@@ -1,235 +1,565 @@
-# TawasolPay Cyber Risk Assistant
 
-A smart system that finds the riskiest cyber threats in your organization and explains what to do about them.
 
-## What It Does
 
-✅ Finds the **top 5 cyber risks** in your network  
-✅ Explains **why** each risk is dangerous (threat actors, business impact, patch status)  
-✅ Tells you **which NIST security control** to implement to fix it  
-✅ Shows **evidence**: CVSS score, exploit availability, ransomware campaigns, EDR status  
-✅ Uses **AI embeddings** to match risks to the right security controls  
+TawasolPay Cyber Risk Assistant
+A contextual cyber-risk prioritization system that identifies the Top 5 vulnerabilities requiring the most urgent attention by combining technical severity, threat intelligence, asset exposure, business criticality, compensating controls, exploit activity, and authoritative security references.
 
-It takes your:
-- Assets (servers, databases, load balancers)
-- Vulnerabilities (CVEs with CVSS scores)
-- Threat intelligence (who's attacking, what campaigns)
-- Business services (payment processing, customer login, etc.)
+Live Demo: https://hivepro-ai-associate.onrender.com
+Repository: https://github.com/shashidharReddy866/hivepro-ai-associate
 
-...and ranks them by **real-world business risk**, not just CVSS score.
+Overview
+Traditional vulnerability prioritization often over-relies on CVSS severity. This project takes a broader approach: a vulnerability becomes more urgent when it is combined with factors such as:
 
----
+Internet exposure
 
-## Quick Start (2 Minutes)
+Confirmed exploit availability
 
-### Run Locally
+Weaponization and active threat campaigns
 
-```bash
+Ransomware association
+
+CISA Known Exploited Vulnerabilities (KEV) coverage
+
+Asset criticality
+
+Business-service impact
+
+Compliance scope and revenue impact
+
+Missing endpoint protection / compensating controls
+
+Vulnerability age and patch availability
+
+The result is a transparent, evidence-driven Top 5 risk view intended to help a security team decide what to remediate first and why.
+
+What the Application Provides
+1. Contextual Top 5 Risk Prioritization
+The application evaluates open vulnerabilities and produces a ranked Top 5 list.
+
+Each result includes:
+
+Risk rank
+
+Normalized score (0–100)
+
+Raw score
+
+Affected asset
+
+CVE and CVSS
+
+Exploit and patch status
+
+Threat actor and campaign evidence
+
+Ransomware association
+
+CISA KEV evidence
+
+Business-service impact
+
+NIST SP 800-53 remediation guidance
+
+Operational remediation guidance
+
+Transparent scoring factors
+
+2. Evidence-Based Explanations
+The application explains why a risk ranks highly using the evidence available in the data rather than treating CVSS as the only signal.
+
+Example factors include:
+
+Internet exposed + exploit available + ransomware campaign + no EDR + CISA KEV + critical business impact
+
+3. NIST SP 800-53 Remediation Mapping
+Each prioritized risk is mapped to a NIST SP 800-53 Rev. 5 control.
+
+The system supports:
+
+Semantic retrieval using sentence-transformer embeddings
+
+Lexical/context-aware fallback retrieval
+
+Context-specific boosts for scenarios such as ransomware response, vulnerability remediation, identity risks, and unsupported software
+
+Source provenance back to the NIST catalog
+
+4. CISA KEV Enrichment
+CVE records are cross-referenced against the CISA Known Exploited Vulnerabilities catalog.
+
+When a match exists, the dashboard surfaces:
+
+Date added
+
+Known ransomware campaign use
+
+Required action
+
+5. Optional Generative AI
+Google Gemini can be enabled for concise, human-readable risk explanations and NIST control summaries.
+
+The application also works without an API key by using deterministic fallback explanations.
+
+Architecture
+                   ┌─────────────────────────────┐
+                   │       Input Data Pack        │
+                   │                             │
+                   │ assets.csv                   │
+                   │ vulnerabilities.csv         │
+                   │ threat_intelligence.csv     │
+                   │ business_services.csv       │
+                   │ remediation_guidance.csv    │
+                   │ synthetic_threat_report.md  │
+                   └──────────────┬──────────────┘
+                                  │
+                                  ▼
+                   ┌─────────────────────────────┐
+                   │       Risk Engine            │
+                   │                             │
+                   │ Asset / vulnerability joins │
+                   │ Contextual scoring           │
+                   │ Threat intelligence          │
+                   │ Business impact              │
+                   │ Control-gap analysis         │
+                   └──────────────┬──────────────┘
+                                  │
+                    ┌─────────────┴─────────────┐
+                    ▼                           ▼
+          ┌───────────────────┐       ┌────────────────────┐
+          │ CISA KEV          │       │ NIST SP 800-53     │
+          │ CVE enrichment    │       │ control retrieval  │
+          └─────────┬─────────┘       └─────────┬──────────┘
+                    │                           │
+                    └─────────────┬─────────────┘
+                                  ▼
+                   ┌─────────────────────────────┐
+                   │       Top 5 Risk Report      │
+                   │                             │
+                   │ Score + evidence + rationale │
+                   │ Threat context               │
+                   │ Business impact              │
+                   │ NIST remediation             │
+                   └──────────────┬──────────────┘
+                                  │
+                                  ▼
+                   ┌─────────────────────────────┐
+                   │       Web Dashboard          │
+                   │        Node.js + HTTP        │
+                   └─────────────────────────────┘
+Data Sources
+The application ingests the complete assignment data pack:
+
+Source	Purpose
+assets.csv	Asset identity, type, ownership, exposure, criticality, EDR status, location
+vulnerabilities.csv	CVE, CVSS, exploitability, patch status, affected component, age
+threat_intelligence.csv	Threat actors, campaigns, exploit maturity, ransomware association, confidence
+business_services.csv	Business criticality, revenue impact, customer-facing status, RTO, compliance scope
+remediation_guidance.csv	Operational remediation actions and validation evidence
+synthetic_threat_report.md	Scenario-level threat context
+The application also uses authoritative external references:
+
+NIST SP 800-53 Rev. 5 catalog
+
+CISA Known Exploited Vulnerabilities (KEV) catalog
+
+Reference data is cached under /references and can be refreshed from their official sources.
+
+Risk Scoring Methodology
+The scoring model is intentionally transparent and deterministic.
+
+For each open vulnerability:
+
+Raw Risk Score =
+    CVSS weighted severity
+  + Internet exposure
+  + Asset criticality
+  + Business-service impact
+  + Exploit / threat intelligence
+  + Missing controls / vulnerability age
+The resulting raw score is normalized to a 0–100 dashboard score.
+
+Contextual Signals
+Technical severity
+CVSS contributes to the baseline severity but does not determine the final ranking by itself.
+
+Exposure
+Internet-facing assets receive additional risk weighting because exploitable weaknesses are more directly reachable.
+
+Asset criticality
+Critical and high-value assets receive additional weight.
+
+Business impact
+Business-service attributes such as:
+
+Revenue impact
+
+Customer-facing status
+
+Recovery time objective
+
+Compliance scope
+
+Risk appetite
+
+increase the priority of vulnerabilities that could materially affect the organization.
+
+Exploit and threat signals
+The model increases priority for:
+
+Confirmed exploit availability
+
+Weaponized exploitation
+
+Threat-actor campaign matches
+
+Ransomware association
+
+CISA KEV inclusion
+
+Known ransomware campaign use in CISA KEV
+
+Compensating-control gaps and age
+Risk increases when:
+
+EDR is absent
+
+Assets have not been recently observed
+
+A patch is unavailable
+
+Vulnerabilities have remained open for extended periods
+
+The dashboard exposes these scoring components so the ranking remains auditable.
+
+NIST Retrieval / RAG Design
+The repository contains a semantic retrieval implementation using:
+
+Xenova/all-MiniLM-L6-v2
+
+The retrieval query is constructed from risk context such as:
+
+Vulnerability name
+
+Affected component
+
+Asset type
+
+Threat-intelligence summary
+
+Operational remediation hint
+
+The system then compares the query representation with NIST control representations using cosine similarity.
+
+When semantic retrieval is unavailable or deliberately disabled, the application falls back to a lexical/context-aware retrieval strategy with explicit contextual boosts.
+
+Production deployment note
+The public Render Free deployment uses:
+
+SEMANTIC_RAG=false
+This prevents the resource-intensive transformer model from consuming the constrained free runtime during live requests.
+
+The semantic RAG implementation remains part of the application and can be enabled with:
+
+SEMANTIC_RAG=true
+This deployment decision is intentional: it preserves the RAG capability in the codebase while keeping the public demonstration responsive and reliable on the constrained hosting tier.
+
+AI / Gemini Integration
+Gemini is optional.
+
+Without GEMINI_API_KEY, the application uses deterministic, template-based explanations.
+
+With the API key configured, Gemini can generate:
+
+Concise risk-priority narratives
+
+NIST control summaries
+
+Prompts instruct the model to use only the evidence supplied by the risk engine, reducing the likelihood of unsupported claims.
+
+Example environment variable:
+
+GEMINI_API_KEY=your_api_key
+Quick Start
+Requirements
+Node.js
+
+npm
+
+Install
 npm install
+Run
 npm start
-```
+Then open:
 
-Open **http://localhost:3000** in your browser.
-
-See the dashboard with top 5 risks, scores, threat details, and NIST controls.
-
----
-
-## Deploy to Public URL
-
-### Railway (Easiest - Free Tier)
-
-1. Go to **https://railway.app/new**
-2. Click **Deploy from GitHub**
-3. Connect your GitHub account
-4. Select this repository
-5. Click **Deploy Now**
-6. Wait 2-3 minutes
-7. Get your public URL from Railway dashboard ✓
-
-Your app is now live: `https://your-app-name.up.railway.app`
-
-### Other Platforms
-
-See [DEPLOYMENT.md](DEPLOYMENT.md) for:
-- **Render** setup (3 clicks)
-- **Fly.io** setup (CLI)
-- **Environment variables** and Gemini API setup
-
----
-
-## AI-Powered Explanations (Optional)
-
-By default, the system generates risk explanations using templates. For smarter AI-generated explanations using Google Gemini:
-
-```bash
-# Set your API key (PowerShell)
-$env:GEMINI_API_KEY = 'your-key-here'
-npm start
-```
-
-**Get a free Gemini API key**: https://aistudio.google.com/ (click "Get API Key")
-
-**On Railway/Render**: Add `GEMINI_API_KEY` in your platform's environment variables.
-
-See [DEPLOYMENT.md](DEPLOYMENT.md#configure-gemini-api-optional) for detailed setup.
-
----
-
-## How It Works
-
-### Step 1: Load Data
-Loads assets, vulnerabilities, threat intel, and NIST controls from CSV/JSON files bundled in `/data`.
-
-### Step 2: Score Risks
-Each open vulnerability is scored based on:
-- CVSS severity
-- Is it exposed to the internet?
-- Is there an exploit available?
-- Is it in CISA's Known Exploited Vulnerabilities list?
-- Which threat actors are using it?
-- How critical is the affected asset?
-- What's the business impact (payment processing, customer login, etc.)?
-- Is EDR protection installed?
-
-### Step 3: Match NIST Controls
-For each risk, the system finds the best **NIST SP 800-53 security control** to implement:
-- Uses **AI embeddings** to match risk context to control relevance
-- Falls back to keyword matching if needed
-- Shows why that control is relevant to the specific risk
-
-### Step 4: Display Results
-Shows the **top 5 risks** with full details:
-- Risk score and ranking
-- Asset, vulnerability, threat actor
-- Business service impact
-- NIST control to implement
-- Evidence breakdown (all scoring factors)
-
----
-
-## Project Structure
-
-```
-hivepro-ai-associate/
-├── public/                    # Frontend (HTML, CSS, JavaScript)
-│   ├── index.html            # Dashboard page
-│   ├── app.js                # Dashboard logic (search, filtering)
-│   └── styles.css            # Dashboard styling
-├── src/                       # Backend (Node.js)
-│   ├── server.js             # Webserver (API endpoints)
-│   ├── riskEngine.js         # Risk scoring, NIST matching, embeddings
-│   ├── csv.js                # CSV parsing utility
-│   └── cli.js                # Command-line interface
-├── data/                      # Input data (bundled, no database needed)
-│   ├── assets.csv            # Servers, databases, devices
-│   ├── vulnerabilities.csv   # CVEs with CVSS, patch status
-│   ├── threat_intelligence.csv  # Threat actors, campaigns
-│   ├── business_services.csv # Payment processing, login, etc.
-│   ├── remediation_guidance.csv # How to fix each vulnerability
-│   ├── synthetic_threat_report.md  # Sample threat report
-│   └── vulnerabilities.csv   # Open CVEs
-├── references/               # NIST controls and CISA KEV (cached at runtime)
-├── tests/                    # Unit tests for risk scoring
-├── DEPLOYMENT.md             # How to deploy to Railway, Render, Fly.io
-└── package.json              # Dependencies (Express, transformers, etc.)
-```
-
----
-
-## Commands
-
-```bash
-# Install dependencies
-npm install
-
-# Run locally (http://localhost:3000)
-npm start
-
-# Analyze and print results to terminal
+http://localhost:3000
+Run the analysis from the CLI
 npm run analyze
-
-# Refresh NIST and CISA KEV data from official sources
-npm run refresh:references
-
-# Run tests
+Run tests
 npm test
-```
+Refresh reference data
+npm run refresh:references
+Public Deployment — Render
+The current public deployment uses Render.
 
----
+Render Configuration
+Typical settings:
 
-## Technology Stack
+Service Type: Web Service
+Runtime: Node
+Branch: main
+Start Command: npm start
+The application listens on the environment-provided PORT and binds to 0.0.0.0.
 
-| Part | Technology | Why |
-|------|-----------|-----|
-| **Web Server** | Node.js + Express | Fast, lightweight, easy to deploy |
-| **Frontend** | HTML + CSS + JavaScript | No framework needed, minimal overhead |
-| **Risk Scoring** | JavaScript logic | Joins CSV data, calculates weighted scores |
-| **NIST Matching** | Sentence Transformers (embeddings) | Semantic matching (AI-powered, not keyword matching) |
-| **AI Explanations** | Google Gemini API (optional) | Generates natural-language risk narratives |
-| **Data** | CSV files (bundled) | No database needed, fast startup |
+Required production setting for the free deployment
+SEMANTIC_RAG=false
+Optional
+GEMINI_API_KEY=your_api_key
+Health endpoint
+GET /health
+Expected response:
 
----
+{
+  "status": "ok",
+  "service": "tawasolpay-cyber-risk-assistant"
+}
+Risk API
+GET /api/risks
+The endpoint returns the complete prioritized risk report consumed by the dashboard.
 
-## Environment Variables (Optional)
+Reference refresh endpoint
+POST /api/references/refresh
+This refreshes the NIST and CISA KEV reference caches.
 
-| Variable | Purpose | Default |
-|----------|---------|---------|
-| `GEMINI_API_KEY` | Google Gemini API for AI explanations | Not set (uses templates) |
-| `PORT` | Server port | 3000 (or set by platform) |
+Project Structure
+hivepro-ai-associate/
+├── data/
+│   ├── assets.csv
+│   ├── vulnerabilities.csv
+│   ├── threat_intelligence.csv
+│   ├── business_services.csv
+│   ├── remediation_guidance.csv
+│   └── synthetic_threat_report.md
+│
+├── references/
+│   ├── nist_sp800_53_controls.csv
+│   └── cisa_kev.json
+│
+├── public/
+│   ├── index.html
+│   ├── app.js
+│   └── styles.css
+│
+├── src/
+│   ├── csv.js
+│   ├── cli.js
+│   └── riskEngine.js
+│
+├── tests/
+│   └── riskEngine.test.js
+│
+├── server.js
+├── DEPLOYMENT.md
+├── package.json
+└── README.md
+Technology Stack
+Area	Technology
+Runtime	Node.js
+HTTP server	Node.js built-in http module
+Frontend	HTML, CSS, vanilla JavaScript
+Risk engine	JavaScript
+Semantic retrieval	@xenova/transformers / Xenova/all-MiniLM-L6-v2
+Generative AI	Google Gemini API (optional)
+Reference data	NIST SP 800-53 + CISA KEV
+Data format	CSV + JSON + Markdown
+Testing	Node.js test runner / assertions
+Deployment	Render Web Service
+The implementation intentionally avoids an unnecessary frontend framework or heavyweight backend framework for this assignment.
 
----
+API Endpoints
+Health
+GET /health
+Used for service health monitoring.
 
-## FAQ
+Risk Report
+GET /api/risks
+Returns:
 
-**Q: Do I need a database?**  
-A: No. All data is bundled in CSV files and loaded at startup. Very fast, easy to deploy.
+Top 5 risks
 
-**Q: Can I customize the data?**  
-A: Yes. Edit the CSV files in `/data/`:
-- Add/remove assets, vulnerabilities, threat intel
-- Adjust business service criticality
-- Add new remediation guidance
+Asset context
 
-**Q: How often does NIST/CISA data update?**  
-A: Run `npm run refresh:references` to download the latest. Data is cached locally.
+Vulnerability context
 
-**Q: Why is the first startup slow?**  
-A: Server pre-computes embeddings for all 1000+ NIST controls (~45 seconds). This is cached, so subsequent API calls are instant.
+Threat intelligence
 
-**Q: Can I use this in production?**  
-A: Yes. Deploy to Railway (free tier), Render, or Fly.io with one click. No special setup needed.
+CISA KEV evidence
 
----
+Business-service context
 
-## What Evaluators Will See
+NIST remediation
 
-✅ **Embeddings-Based Retrieval**: NIST controls matched using AI embeddings, not keyword matching  
-✅ **AI Integration**: Gemini API generates intelligent risk explanations (if API key set)  
-✅ **Professional Dashboard**: Clean UI showing top 5 risks with full evidence  
-✅ **Structured Scoring**: Transparent evidence breakdown (CVSS, exposure, threat, business impact)  
-✅ **Production Ready**: Deployed on Railway with public URL  
-✅ **Clean Code**: Modular, well-commented, testable  
+Scoring evidence
 
----
+Reference provenance
 
-## Next Steps
+Refresh References
+POST /api/references/refresh
+Refreshes the cached NIST and CISA KEV reference data.
 
-1. **Run locally**: `npm start` → http://localhost:3000
-2. **Deploy**: Go to https://railway.app/new → Deploy from GitHub
-3. **(Optional) Enable AI**: Set `GEMINI_API_KEY` and redeploy
-4. **Customize**: Edit `/data/` CSV files to match your environment
+Testing and Validation
+The project includes automated tests covering core behavior such as:
 
----
+CSV parsing
 
-## Support & Documentation
+Data ingestion counts
 
-- **How to deploy?** → [DEPLOYMENT.md](DEPLOYMENT.md)
-- **How to set up Gemini?** → [DEPLOYMENT.md](DEPLOYMENT.md#configure-gemini-api-optional)
-- **Questions?** → Check the code comments in `src/riskEngine.js`
+Top 5 generation
 
----
+Risk ordering
 
-## License
+Score normalization
 
+Ransomware-related prioritization
+
+NIST control presence
+
+NIST source provenance
+
+Run:
+
+npm test
+Expected result:
+
+All tests passed
+README Questions from the Assignment
+1. What data would you keep structured vs embedded, and why?
+Structured data
+I would keep the following structured:
+
+Asset inventory
+
+Vulnerability/CVE records
+
+CVSS and exploitability attributes
+
+Business-service metadata
+
+Threat-intelligence indicators
+
+CISA KEV matches
+
+Remediation actions
+
+Risk scores and scoring factors
+
+These fields are well suited to deterministic joins, filtering, aggregation, validation, reporting, and auditing.
+
+Embedded data
+I would embed:
+
+Long-form threat reports
+
+Security advisories
+
+NIST control descriptions and discussions
+
+Analyst narratives
+
+Other unstructured security documents
+
+Embeddings are useful when the system needs semantic similarity rather than exact keyword matches.
+
+The implementation follows this principle by keeping the core risk facts structured while supporting semantic retrieval for NIST control relevance.
+
+2. Failure cases and how would you mitigate them?
+External reference download failure
+If NIST or CISA data cannot be downloaded, the application can continue using the locally cached reference files when available.
+
+Mitigation: cache reference data and expose provenance so the operator can see where the information originated.
+
+Missing or incomplete data
+An asset may not map cleanly to a business service or a vulnerability may not have matching threat intelligence.
+
+Mitigation: use safe defaults, preserve the available evidence, and avoid fabricating missing information.
+
+Semantic model unavailable
+The embedding model may fail to load or may be unsuitable for a constrained deployment environment.
+
+Mitigation: fall back to lexical/context-aware retrieval. The dashboard also reports the retrieval method used.
+
+Gemini unavailable
+The API key may be missing, invalid, unavailable, or the model call may fail.
+
+Mitigation: use deterministic template-based explanations instead of blocking the risk report.
+
+Incorrect or misleading semantic retrieval
+A semantically similar NIST control is not automatically the correct operational control.
+
+Mitigation: combine semantic retrieval with lexical/contextual signals, preserve source provenance, expose the selected control, and keep the final recommendation reviewable by a human analyst.
+
+Model or prompt manipulation
+Untrusted threat-report content could contain instructions intended to manipulate an AI model.
+
+Mitigation: treat ingested content as data rather than instructions, constrain prompts to supplied evidence, and keep risk scoring deterministic rather than allowing an LLM to directly control prioritization.
+
+Resource constraints
+Embedding thousands of NIST control representations can be expensive on small hosting instances.
+
+Mitigation: cache reference data, avoid repeated model loading, provide a lightweight retrieval fallback, and use deployment-specific configuration such as SEMANTIC_RAG=false on constrained environments.
+
+3. What is one thing you would change or improve?
+The next improvement would be to persist precomputed NIST embeddings and cache the generated risk report.
+
+This would reduce cold-start latency, avoid repeated embedding computation, make the API more resilient on constrained infrastructure, and allow semantic retrieval to remain enabled without recalculating the full reference representation for every service lifecycle.
+
+A second-stage improvement would be adding a stronger evaluation suite with labeled scenarios to measure retrieval precision, ranking quality, and false-positive behavior.
+
+Security and Reliability Considerations
+The project deliberately separates deterministic security logic from optional generative AI.
+
+Deterministic components
+The following remain rule-based and auditable:
+
+Risk scoring
+
+Top 5 ranking
+
+CVE-to-asset joins
+
+Threat-intelligence matching
+
+CISA KEV matching
+
+Business-impact weighting
+
+Evidence generation
+
+AI-assisted components
+Gemini is used only for natural-language explanation and summaries.
+
+This prevents a generative model from becoming the single point of truth for security prioritization.
+
+Current Demo Dataset
+The current public deployment demonstrates the assignment against:
+
+60 assets
+
+114 vulnerabilities
+
+40 threat-intelligence records
+
+20 business services
+
+The dashboard presents the five highest-priority open vulnerabilities produced by the contextual scoring model.
+
+Submission
+Live application
+https://hivepro-ai-associate.onrender.com
+
+GitHub repository
+https://github.com/shashidharReddy866/hivepro-ai-associate
+
+The repository contains the application source, test suite, assignment data, reference-handling logic, deployment documentation, and README.
+
+License
 MIT
