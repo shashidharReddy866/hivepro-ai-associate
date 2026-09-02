@@ -69,6 +69,28 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`Cyber Risk Assistant running at http://localhost:${PORT}`);
-});
+// Pre-load embedding model and references at startup to avoid timeout on first request
+async function startServer() {
+  try {
+    console.log("Initializing embedding model and computing NIST control embeddings...");
+    const { getEmbeddingModel, generateRiskReport } = require("./src/riskEngine");
+    
+    // Load embedding model
+    await getEmbeddingModel();
+    console.log("Embedding model ready.");
+    
+    // Pre-compute embeddings for all NIST controls by doing a dummy risk report
+    console.log("Pre-computing NIST control embeddings (this may take 30-60 seconds on first run)...");
+    await generateRiskReport({ refresh: false });
+    console.log("Embeddings computed and cached.");
+  } catch (err) {
+    console.warn("Warning: Embedding pre-computation failed:", err.message);
+    console.warn("System will compute embeddings on first request.");
+  }
+
+  server.listen(PORT, () => {
+    console.log(`Cyber Risk Assistant running at http://localhost:${PORT}`);
+  });
+}
+
+startServer();

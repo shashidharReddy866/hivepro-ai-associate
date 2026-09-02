@@ -183,6 +183,10 @@ async function refreshReferences() {
   };
 }
 
+let cachedReferences = null;
+let cachedNistCsv = null;
+let cachedKevJson = null;
+
 async function ensureReferences(refresh = false) {
   try {
     if (refresh) throw new Error("refresh requested");
@@ -190,14 +194,28 @@ async function ensureReferences(refresh = false) {
       fs.readFile(NIST_CACHE, "utf8"),
       fs.readFile(KEV_CACHE, "utf8")
     ]);
-    return parseReferences(nistCsv, kevJson, false);
+    
+    // Return cached references if input hasn't changed
+    if (cachedReferences && cachedNistCsv === nistCsv && cachedKevJson === kevJson) {
+      return cachedReferences;
+    }
+    
+    const references = await parseReferences(nistCsv, kevJson, false);
+    cachedReferences = references;
+    cachedNistCsv = nistCsv;
+    cachedKevJson = kevJson;
+    return references;
   } catch (_) {
     const result = await refreshReferences();
     const [nistCsv, kevJson] = await Promise.all([
       fs.readFile(NIST_CACHE, "utf8"),
       fs.readFile(KEV_CACHE, "utf8")
     ]);
-    return { ...parseReferences(nistCsv, kevJson, true), refreshResult: result };
+    const references = { ...await parseReferences(nistCsv, kevJson, true), refreshResult: result };
+    cachedReferences = references;
+    cachedNistCsv = nistCsv;
+    cachedKevJson = kevJson;
+    return references;
   }
 }
 
@@ -520,4 +538,4 @@ async function generateRiskReport({ refresh = false } = {}) {
   };
 }
 
-module.exports = { generateRiskReport, refreshReferences, NIST_URL, KEV_URL };
+module.exports = { generateRiskReport, refreshReferences, getEmbeddingModel, NIST_URL, KEV_URL };
