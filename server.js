@@ -61,7 +61,7 @@ const server = http.createServer(async (req, res) => {
       `http://${req.headers.host || "localhost"}`
     );
 
-    // Health check for Railway / deployment monitoring
+    // Health check
     if (url.pathname === "/health") {
       sendJson(res, 200, {
         status: "ok",
@@ -105,22 +105,8 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-// Start the HTTP server immediately.
-// This allows Railway to detect the application as healthy
-// without waiting for NIST embeddings or risk analysis.
+// Start the server immediately.
+// Do NOT perform heavy NIST/risk initialization here.
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`Cyber Risk Assistant running on port ${PORT}`);
-
-  // Perform the initial risk analysis in the background.
-  // The server is already listening and can respond to health checks.
-  generateRiskReport({ refresh: false })
-    .then(() => {
-      console.log("Initial risk report generated successfully.");
-    })
-    .catch((err) => {
-      console.warn(
-        "Background risk report generation failed:",
-        err.message
-      );
-    });
 });
