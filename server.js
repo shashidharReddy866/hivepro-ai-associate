@@ -16,12 +16,19 @@ const MIME_TYPES = {
 };
 
 function sendJson(res, status, data) {
-  res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+  res.writeHead(status, {
+    "content-type": "application/json; charset=utf-8"
+  });
+
   res.end(JSON.stringify(data, null, 2));
 }
 
 function sendStatic(req, res) {
-  const urlPath = new URL(req.url, `http://${req.headers.host}`).pathname;
+  const urlPath = new URL(
+    req.url,
+    `http://${req.headers.host || "localhost"}`
+  ).pathname;
+
   const requested = urlPath === "/" ? "/index.html" : urlPath;
   const filePath = path.normalize(path.join(PUBLIC_DIR, requested));
 
@@ -37,60 +44,83 @@ function sendStatic(req, res) {
       res.end("Not found");
       return;
     }
+
     res.writeHead(200, {
-      "content-type": MIME_TYPES[path.extname(filePath)] || "application/octet-stream"
+      "content-type":
+        MIME_TYPES[path.extname(filePath)] || "application/octet-stream"
     });
+
     res.end(content);
   });
 }
 
 const server = http.createServer(async (req, res) => {
   try {
-    const url = new URL(req.url, `http://${req.headers.host}`);
+    const url = new URL(
+      req.url,
+      `http://${req.headers.host || "localhost"}`
+    );
 
+    // Health check for Railway / deployment monitoring
+    if (url.pathname === "/health") {
+      sendJson(res, 200, {
+        status: "ok",
+        service: "tawasolpay-cyber-risk-assistant"
+      });
+      return;
+    }
+
+    // Risk analysis API
     if (url.pathname === "/api/risks") {
-      const report = await generateRiskReport({ refresh: url.searchParams.get("refresh") === "1" });
+      const report = await generateRiskReport({
+        refresh: url.searchParams.get("refresh") === "1"
+      });
+
       sendJson(res, 200, report);
       return;
     }
 
-    if (url.pathname === "/api/references/refresh" && req.method === "POST") {
+    // Explicit reference refresh endpoint
+    if (
+      url.pathname === "/api/references/refresh" &&
+      req.method === "POST"
+    ) {
       const result = await refreshReferences();
       sendJson(res, 200, result);
       return;
     }
 
+    // Serve frontend
     sendStatic(req, res);
   } catch (error) {
+    console.error("Request error:", error);
+
     sendJson(res, 500, {
       error: error.message,
-      stack: process.env.NODE_ENV === "production" ? undefined : error.stack
+      stack:
+        process.env.NODE_ENV === "production"
+          ? undefined
+          : error.stack
     });
   }
 });
 
-// Pre-load embedding model and references at startup to avoid timeout on first request
-async function startServer() {
-  try {
-    console.log("Initializing embedding model and computing NIST control embeddings...");
-    const { getEmbeddingModel, generateRiskReport } = require("./src/riskEngine");
-    
-    // Load embedding model
-    await getEmbeddingModel();
-    console.log("Embedding model ready.");
-    
-    // Pre-compute embeddings for all NIST controls by doing a dummy risk report
-    console.log("Pre-computing NIST control embeddings (this may take 30-60 seconds on first run)...");
-    await generateRiskReport({ refresh: false });
-    console.log("Embeddings computed and cached.");
-  } catch (err) {
-    console.warn("Warning: Embedding pre-computation failed:", err.message);
-    console.warn("System will compute embeddings on first request.");
-  }
+// Start the HTTP server immediately.
+// This allows Railway to detect the application as healthy
+// without waiting for NIST embeddings or risk analysis.
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`Cyber Risk Assistant running on port ${PORT}`);
 
-  server.listen(PORT, () => {
-    console.log(`Cyber Risk Assistant running at http://localhost:${PORT}`);
-  });
-}
-
-startServer();
+  // Perform the initial risk analysis in the background.
+  // The server is already listening and can respond to health checks.
+  generateRiskReport({ refresh: false })
+    .then(() => {
+      console.log("Initial risk report generated successfully.");
+    })
+    .catch((err) => {
+      console.warn(
+        "Background risk report generation failed:",
+        err.message
+      );
+    });
+});
