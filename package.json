@@ -10,6 +10,7 @@
     "refresh:references": "node scripts/download-references.js"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.21.0",
     "@xenova/transformers": "^2.6.0"
   },
   "engines": {

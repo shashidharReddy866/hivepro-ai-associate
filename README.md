@@ -38,6 +38,21 @@ Refresh official reference data:
 npm.cmd run refresh:references
 ```
 
+## 🤖 AI-Powered Risk Analysis (Gemini API)
+
+This system uses **Google Gemini API** to generate intelligent risk explanations and NIST control summaries:
+
+- **Smart Risk Narratives**: Instead of template-based explanations, Gemini analyzes vulnerability severity, asset criticality, threat actors, and compliance impact to generate context-aware explanations for why each risk ranks high.
+- **Intelligent Control Summaries**: NIST SP 800-53 control text is summarized in plain language, focusing on relevance to the specific risk.
+
+**To enable LLM features**, set your Gemini API key:
+```bash
+$env:GEMINI_API_KEY = 'your-api-key-here'
+npm run analyze
+```
+
+See [GEMINI_SETUP.md](GEMINI_SETUP.md) for detailed setup instructions. Without the API key, the system gracefully falls back to template-based explanations while maintaining full functionality.
+
 ## What It Does
 
 The system joins vulnerabilities from `data/` to assets, business service context, local threat intelligence, and CISA KEV data. It scores each open vulnerability using CVSS plus internet exposure, exploit availability, direct campaign match, ransomware association, business criticality, compliance/revenue impact, EDR coverage, patch availability, and age. The dashboard shows the top five risks as readable entries with the asset, vulnerability, threat match, business service, explanation, evidence factors, and the retrieved NIST control.
@@ -54,6 +69,21 @@ I query the CSV data as structured records because assets, vulnerabilities, serv
 I retrieve NIST SP 800-53 as reference text using **sentence-transformer embeddings** (`Xenova/all-MiniLM-L6-v2`). At startup, the system computes embeddings for all NIST control descriptions and caches them. For each risk, it generates a query embedding from the vulnerability name, affected component, asset type, threat summary, and remediation hints, then ranks controls by cosine similarity to the query embedding. This semantic retrieval is what the assignment brief evaluates: controls are chosen based on semantic relevance to the risk context, not keyword matching.
 
 The system maintains provenance and traceability: each NIST control includes the control ID, name, and a summary of its guidance text. If the embedding model is unavailable, it gracefully falls back to lightweight lexical token-overlap scoring with context-aware boosts for common patterns (ransomware → IR-4, missing EDR → RA-5, auth issues → AC-2, patching → SI-2).
+
+## AI Components
+
+**Risk Explanations** (using Gemini API when available):
+- Instead of hardcoded templates, the system calls Gemini to generate natural-language explanations for why each risk ranks high
+- Factors considered: vulnerability details, asset criticality, business service impact, threat actor activity, EDR coverage, CISA KEV status
+- Fallback to template-based sentences if API unavailable
+
+**NIST Control Summaries** (using Gemini API when available):
+- Generates concise, relevance-focused summaries of control text
+- Explains what the control does and why it matters for the specific risk
+- Fallback to automatic truncation if API unavailable
+
+Both features require `GEMINI_API_KEY` environment variable. See [GEMINI_SETUP.md](GEMINI_SETUP.md) for configuration.
+
 
 
 ## Where It Can Go Wrong

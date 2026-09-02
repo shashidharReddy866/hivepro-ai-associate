@@ -24,13 +24,56 @@ railway up
 
 ## Environment Setup
 
-The app requires no environment variables in the free tier. Default configuration:
+### Required Variables (Optional)
+
+The app works without any environment variables. However, to enable AI-powered risk explanations and NIST summaries, configure:
+
+- **`GEMINI_API_KEY`**: Your Google Gemini API key for LLM-based explanations
+  - Get one at: https://aistudio.google.com/
+  - If not set, the system uses template-based explanations (full functionality maintained)
+
+### Default Configuration
+
 - **Port**: Automatically set by platform (or 3000 locally)
 - **Node version**: 20.x or higher
 - **Build command**: `npm install`
 - **Start command**: `npm start`
 
+- **Start command**: `npm start`
+
 All data (assets, vulnerabilities, threat intel) is bundled in `/data` — no database required.
+
+---
+
+## Configure Gemini API (Optional)
+
+To enable AI-powered risk explanations:
+
+**Railway**:
+1. Go to your Railway project dashboard
+2. Click **Variables** in the left sidebar
+3. Add new variable: `GEMINI_API_KEY = your-api-key-here`
+4. Deploy again (Redeploy from git or click "Trigger Deploy")
+
+**Render**:
+1. Go to your Render service dashboard
+2. Click **Environment**
+3. Add new environment variable: `GEMINI_API_KEY = your-api-key-here`
+4. Click **Save and Deploy**
+
+**Local Development**:
+```bash
+$env:GEMINI_API_KEY = 'your-api-key-here'
+npm start
+```
+
+**Getting a Gemini API Key**:
+1. Go to https://aistudio.google.com/
+2. Click "Get API Key" (top right)
+3. Create a new API key
+4. Copy the key and paste into your platform's environment variables
+
+Without `GEMINI_API_KEY`, the system gracefully falls back to template-based explanations while maintaining full functionality.
 
 ---
 

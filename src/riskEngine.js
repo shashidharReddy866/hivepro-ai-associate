@@ -2,6 +2,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 
 const { parseCsv } = require("./csv");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const ROOT = path.join(__dirname, "..");
 const DATA_DIR = path.join(ROOT, "data");
@@ -12,6 +13,106 @@ const KEV_CACHE = path.join(REFERENCE_DIR, "cisa_kev.json");
 const NIST_URL =
   "https://csrc.nist.gov/CSRC/media/Projects/risk-management/800-53%20Downloads/800-53r5/NIST_SP-800-53_rev5_catalog_load.csv";
 const KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json";
+
+// Gemini API initialization (requires GEMINI_API_KEY environment variable)
+let geminiModel = null;
+
+async function getGeminiModel() {
+  if (!geminiModel) {
+    try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        console.warn("GEMINI_API_KEY not set, falling back to template-based explanations");
+        return null;
+      }
+      const genAI = new GoogleGenerativeAI(apiKey);
+      geminiModel = genAI.getGenerativeModel({ model: "gemini-pro" });
+    } catch (err) {
+      console.error("Failed to initialize Gemini model, falling back to templates:", err.message);
+      geminiModel = false; // Mark as failed to avoid retrying
+    }
+  }
+  return geminiModel || null;
+}
+
+async function generateRiskExplanation(risk, hint) {
+  const model = await getGeminiModel();
+  if (!model) {
+    // Fallback to template-based explanation
+    const factors = [];
+    if (boolYes(risk.asset.internet_exposed)) factors.push("internet-exposed");
+    if (risk.asset.criticality === "Critical") factors.push("critical business asset");
+    if (boolYes(risk.vulnerability.exploit_available)) factors.push("exploit available");
+    if (risk.threatIntel) factors.push(`${risk.threatIntel.threat_actor} campaign match`);
+    if (risk.threatIntel?.ransomware_association === "Yes") factors.push("ransomware-associated");
+    if (!boolYes(risk.asset.edrInstalled)) factors.push("no EDR");
+    if (risk.kevEntry) factors.push("CISA KEV listed");
+    return `Ranks here because ${factors.join(", ")} combine with ${risk.asset.business_service} business impact, making this more urgent than CVSS alone would show.`;
+  }
+
+  try {
+    const prompt = `You are a cybersecurity risk analyst. Generate a concise 1-2 sentence explanation (max 180 characters) for why this cyber risk ranks high in priority. Be specific and actionable.
+
+Risk Details:
+- Vulnerability: ${risk.vulnerability.name} (${risk.vulnerability.cve}, CVSS ${risk.vulnerability.cvss})
+- Asset: ${risk.asset.name} (${risk.asset.asset_type}, criticality: ${risk.asset.criticality})
+- Business Service: ${risk.asset.business_service}
+- Internet Exposed: ${risk.asset.internet_exposed}
+- EDR Installed: ${risk.asset.edrInstalled}
+- Exploit Available: ${risk.vulnerability.exploit_available}
+- Patch Available: ${risk.vulnerability.patch_available}
+${risk.threatIntel ? `- Threat Actor: ${risk.threatIntel.threat_actor} (Campaign: ${risk.threatIntel.campaign_name}, Ransomware: ${risk.threatIntel.ransomware_association})` : ""}
+${risk.kevEntry ? "- This CVE is in CISA's KEV (Known Exploited Vulnerabilities) catalog" : ""}
+${hint ? `- Recommended Action: ${hint.recommended_action}` : ""}
+
+Provide only the explanation, no preamble.`;
+
+    const result = await model.generateContent(prompt);
+    const explanation = result.response.text().trim();
+    return explanation.slice(0, 360) + (explanation.length > 360 ? "..." : "");
+  } catch (err) {
+    console.error("Gemini risk explanation generation failed, using fallback:", err.message);
+    const factors = [];
+    if (boolYes(risk.asset.internet_exposed)) factors.push("internet-exposed");
+    if (risk.asset.criticality === "Critical") factors.push("critical business asset");
+    if (boolYes(risk.vulnerability.exploit_available)) factors.push("exploit available");
+    if (risk.threatIntel) factors.push(`${risk.threatIntel.threat_actor} campaign match`);
+    if (risk.threatIntel?.ransomware_association === "Yes") factors.push("ransomware-associated");
+    if (!boolYes(risk.asset.edrInstalled)) factors.push("no EDR");
+    if (risk.kevEntry) factors.push("CISA KEV listed");
+    return `Ranks here because ${factors.join(", ")} combine with ${risk.asset.business_service} business impact, making this more urgent than CVSS alone would show.`;
+  }
+}
+
+async function generateNistControlSummary(control) {
+  const model = await getGeminiModel();
+  
+  // Fallback to truncated text extraction
+  const basicSummary = () => {
+    const text = `${control.text} ${control.discussion}`.replace(/\s+/g, " ").trim();
+    const firstSentence = text.split(/(?<=[.!?])\s+/).find((sentence) => sentence.length > 40) || text;
+    return firstSentence.slice(0, 360).replace(/\s+\S*$/, "") + (firstSentence.length > 360 ? "..." : "");
+  };
+
+  if (!model) return basicSummary();
+
+  try {
+    const prompt = `You are a NIST SP 800-53 cybersecurity controls expert. Summarize this control in 1-2 sentences (max 250 characters) focusing on what it does and why it matters.
+
+Control: ${control.id} - ${control.name}
+Text: ${control.text}
+Discussion: ${control.discussion}
+
+Provide only the summary, no preamble.`;
+
+    const result = await model.generateContent(prompt);
+    const summary = result.response.text().trim();
+    return summary.slice(0, 360) + (summary.length > 360 ? "..." : "");
+  } catch (err) {
+    console.error("Gemini control summary generation failed, using fallback:", err.message);
+    return basicSummary();
+  }
+}
 
 // Embedding model initialization (lazy loaded on first use)
 let embeddingModel = null;
@@ -273,10 +374,11 @@ async function retrieveNistControl(controls, risk, hint) {
     best = lexicalBest || controls.find((control) => control.id === "SI-2");
   }
 
+  const summary = await generateNistControlSummary(best);
   return {
     id: best.id,
     name: best.name,
-    summary: summarizeControl(best),
+    summary: summary,
     source: NIST_URL,
     retrievalMethod: queryEmbedding && bestScore >= 0.3 ? "embeddings" : "lexical"
   };
@@ -380,7 +482,7 @@ async function generateRiskReport({ refresh = false } = {}) {
         revenueImpact: risk.service.revenue_impact,
         rtoHours: risk.service.rto_hours
       },
-      why: buildRiskSentence(risk),
+      why: await generateRiskExplanation(risk, hint),
       remediation: {
         nistControl,
         operationalHint: hint
